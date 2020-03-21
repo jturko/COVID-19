@@ -7,12 +7,12 @@
 
 #include<iostream>
 #include<cmath>
-#include <fstream>
+#include<fstream>
 
-double xdim = 150;
-double ydim = 150;
+double xdim = 200;
+double ydim = 100;
 const int npeople = 200;
-double infectionlength = 400;
+double infectionlength = 350;
 
 enum condition
 {
@@ -40,6 +40,14 @@ class person
             fY = y;
             fStatus = status;
             fDirection = direction;
+            fInfectionTime = 1e100;
+        }
+        person(int id) {
+            fId = id;
+            fX = xdim*std::rand()/double(RAND_MAX);
+            fY = ydim*std::rand()/double(RAND_MAX);
+            fStatus = healthy;
+            fDirection = 360.*std::rand()/double(RAND_MAX);
             fInfectionTime = 1e100;
         }
 
@@ -70,12 +78,12 @@ class person
         }
         void walk() {
             // check if beyond boundary, move to it and change dir if we have
-            if( x()<=0 )          { x(0.);      direction(360.*std::rand()/double(RAND_MAX)); }
-            else if( x()>=xdim )  { x(xdim);    direction(360.*std::rand()/double(RAND_MAX)); }
-            else if( y()<0 )      { y(0.);      direction(360.*std::rand()/double(RAND_MAX)); }
-            else if( y()>ydim )   { y(ydim);    direction(360.*std::rand()/double(RAND_MAX)); } 
-            x( x() + std::cos(direction()*M_PI/180.) );
-            y( y() + std::sin(direction()*M_PI/180.) );
+            if     ( x() <= 0 )      { x(0.);      direction(360.*std::rand()/double(RAND_MAX)); }
+            else if( x() >= xdim )   { x(xdim);    direction(360.*std::rand()/double(RAND_MAX)); }
+            else if( y() <= 0 )      { y(0.);      direction(360.*std::rand()/double(RAND_MAX)); }
+            else if( y() >= ydim )   { y(ydim);    direction(360.*std::rand()/double(RAND_MAX)); } 
+            x( x()+std::cos(direction()*M_PI/180.) );
+            y( y()+std::sin(direction()*M_PI/180.) );
         }
         void changedirection() { direction(360.*std::rand()/double(RAND_MAX)); }
       
@@ -89,6 +97,8 @@ class person
 };
 
 int main() {
+    std::cout<<"virus simulation: npeople: "<<npeople<<", dimx: "<<xdim<<", dimy: "<<ydim<<", infection time: "<<infectionlength<<std::endl;
+
     srand(time(0));
     std::ofstream outfile;
     outfile.open("output.dat");    
@@ -98,15 +108,11 @@ int main() {
     int nimmune = 0;
     double time = 0.;
     
+    // populate array with healthy people at random positions
     person * people[npeople];
-    for(int i=0; i<npeople; i++) {
-        people[i] = new person( i,   
-                                xdim*std::rand()/double(RAND_MAX), 
-                                ydim*std::rand()/double(RAND_MAX), 
-                                360.*std::rand()/double(RAND_MAX),
-                                healthy );
-        people[i]->infectiontime(1e100);
-    }
+    for(int i=0; i<npeople; i++) people[i] = new person(i);
+    
+    // make one persons sick
     people[0]->status(sick);
     people[0]->infectiontime(0);
 
@@ -146,7 +152,7 @@ int main() {
             }
         }
         time += 1.;
-        std::cout<<"time: "<<time<<", nsick: "<<nsick<<", nhealthy: "<<nhealthy<<", nimmune: "<<nimmune<<"                \r";
+        std::cout<<std::flush<<"time: "<<time<<", nsick: "<<nsick<<", nhealthy: "<<nhealthy<<", nimmune: "<<nimmune<<"                \r";
         outfile<<time<<"\t"<<nsick<<"\t"<<nhealthy<<"\t"<<nimmune<<std::endl;
     }
     std::cout<<std::endl;
