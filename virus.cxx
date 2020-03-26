@@ -9,10 +9,14 @@
 #include<cmath>
 #include<fstream>
 
-double xdim = 200;
+double xdim = 150;
 double ydim = 100;
 const int npeople = 200;
-double infectionlength = 350;
+double infectionlength = 120;
+double socialdistancing = 0.75;
+double stepsize = 0.5;
+double contactsize = 2.0;
+double quarantinetime = 600;
 
 enum condition
 {
@@ -73,7 +77,7 @@ class person
             if(fStatus!=healthy) std::cout<<",\t infection time: "<<fInfectionTime<<std::endl; else std::cout<<std::endl;
         }
         bool contact(person other) { 
-            if( std::sqrt( std::pow(x()-other.x(),2.) + std::pow(y()-other.y(),2.) ) < 1.0 ) return true; 
+            if( std::sqrt( std::pow(x()-other.x(),2.) + std::pow(y()-other.y(),2.) ) < contactsize ) return true; 
             else return false; 
         }
         void walk() {
@@ -82,8 +86,8 @@ class person
             else if( x() >= xdim )   { x(xdim);    direction(360.*std::rand()/double(RAND_MAX)); }
             else if( y() <= 0 )      { y(0.);      direction(360.*std::rand()/double(RAND_MAX)); }
             else if( y() >= ydim )   { y(ydim);    direction(360.*std::rand()/double(RAND_MAX)); } 
-            x( x()+std::cos(direction()*M_PI/180.) );
-            y( y()+std::sin(direction()*M_PI/180.) );
+            x( x()+stepsize*std::cos(direction()*M_PI/180.) );
+            y( y()+stepsize*std::sin(direction()*M_PI/180.) );
         }
         void changedirection() { direction(360.*std::rand()/double(RAND_MAX)); }
       
@@ -97,7 +101,8 @@ class person
 };
 
 int main() {
-    std::cout<<"virus simulation: npeople: "<<npeople<<", dimx: "<<xdim<<", dimy: "<<ydim<<", infection time: "<<infectionlength<<std::endl;
+    std::cout<<"virus simulation: npeople: "<<npeople<<", dimx: "<<xdim<<", dimy: "<<ydim<<", infection time: "<<infectionlength
+             <<", social dist. factor: "<<socialdistancing<<", quarantine time: "<<quarantinetime<<std::endl;
 
     srand(time(0));
     std::ofstream outfile;
@@ -118,7 +123,8 @@ int main() {
 
     while(nimmune < npeople && nsick > 0) // this iterator is the passage of time
     {
-        for(int i=0; i<npeople; i++) people[i]->walk(); // make them all walk
+        if(time > quarantinetime) socialdistancing = 0.;
+        for(int i=0; i<npeople*(1.0-socialdistancing); i++) people[i]->walk(); // make them walk
         
         for(int i=0; i<npeople; i++) // loop over all people
         {
@@ -152,10 +158,18 @@ int main() {
             }
         }
         time += 1.;
+        // calculate r_0
         std::cout<<std::flush<<"time: "<<time<<", nsick: "<<nsick<<", nhealthy: "<<nhealthy<<", nimmune: "<<nimmune<<"                \r";
         outfile<<time<<"\t"<<nsick<<"\t"<<nhealthy<<"\t"<<nimmune<<std::endl;
+
+        // save data for making a gif
+        std::ofstream giffile;
+        char buffer[50];
+        sprintf(buffer,"gif_files/time_%.0f.dat",time);
+        giffile.open(buffer);
+        for(int i=0; i<npeople; i++) giffile<<people[i]->x()<<",\t"<<people[i]->y()<<",\t"<<people[i]->status()<<std::endl;
+        giffile.close();
     }
-    std::cout<<std::endl;
     outfile.close();
-    //for(int i=0; i<npeople; i++) people[i]->print();
+    std::cout<<std::endl;
 }
