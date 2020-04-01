@@ -12,11 +12,13 @@
 double xdim = 150;
 double ydim = 100;
 const int npeople = 200;
-double infectionlength = 120;
-double socialdistancing = 0.75;
+double infectionlength = 200;
+double socialdistancing = 0.9;
 double stepsize = 0.5;
-double contactsize = 2.0;
+double contactsize = 3.0;
 double quarantinetime = 600;
+double changedirectioninc = 0.2;
+double infectionprobability = 0.05;
 
 enum condition
 {
@@ -35,6 +37,23 @@ std::string pcond(condition status)
     }
 }
 
+double rando() { return std::rand()/double(RAND_MAX); }
+
+void printparameters() {
+    std::cout<<"====================================="<<std::endl
+             <<"virus simulation "<<std::endl
+             <<"npeople:\t\t"<<npeople<<std::endl
+             <<"dimx:\t\t\t"<<xdim<<std::endl
+             <<"dimy:\t\t\t"<<ydim<<std::endl
+             <<"contact size:\t\t"<<contactsize<<std::endl
+             <<"step size:\t\t"<<stepsize<<std::endl
+             <<"infection duration:\t"<<infectionlength<<std::endl
+             <<"social dist. duration:\t"<<quarantinetime<<std::endl
+             <<"social dist. factor:\t"<<socialdistancing<<std::endl
+             <<"infection prob.:\t"<<infectionprobability<<std::endl
+             <<"====================================="<<std::endl;
+}
+
 class person
 {
     public:
@@ -48,10 +67,10 @@ class person
         }
         person(int id) {
             fId = id;
-            fX = xdim*std::rand()/double(RAND_MAX);
-            fY = ydim*std::rand()/double(RAND_MAX);
+            fX = xdim*rando();
+            fY = ydim*rando();
             fStatus = healthy;
-            fDirection = 360.*std::rand()/double(RAND_MAX);
+            fDirection = 360.*rando();
             fInfectionTime = 1e100;
         }
 
@@ -82,14 +101,14 @@ class person
         }
         void walk() {
             // check if beyond boundary, move to it and change dir if we have
-            if     ( x() <= 0 )      { x(0.);      direction(360.*std::rand()/double(RAND_MAX)); }
-            else if( x() >= xdim )   { x(xdim);    direction(360.*std::rand()/double(RAND_MAX)); }
-            else if( y() <= 0 )      { y(0.);      direction(360.*std::rand()/double(RAND_MAX)); }
-            else if( y() >= ydim )   { y(ydim);    direction(360.*std::rand()/double(RAND_MAX)); } 
-            x( x()+stepsize*std::cos(direction()*M_PI/180.) );
-            y( y()+stepsize*std::sin(direction()*M_PI/180.) );
+            if     ( x() <= 0. )     { x(0.);      direction(2.*M_PI*rando()); }
+            else if( x() >= xdim )   { x(xdim);    direction(2.*M_PI*rando()); }
+            else if( y() <= 0. )     { y(0.);      direction(2.*M_PI*rando()); }
+            else if( y() >= ydim )   { y(ydim);    direction(2.*M_PI*rando()); } 
+            x( x()+stepsize*std::cos(direction()) );
+            y( y()+stepsize*std::sin(direction()) );
         }
-        void changedirection() { direction(360.*std::rand()/double(RAND_MAX)); }
+        void changedirection() { fDirection += (1.-2.*rando())*changedirectioninc; }
       
     private:
         int fId;
@@ -101,8 +120,7 @@ class person
 };
 
 int main() {
-    std::cout<<"virus simulation: npeople: "<<npeople<<", dimx: "<<xdim<<", dimy: "<<ydim<<", infection time: "<<infectionlength
-             <<", social dist. factor: "<<socialdistancing<<", quarantine time: "<<quarantinetime<<std::endl;
+    printparameters();
 
     srand(time(0));
     std::ofstream outfile;
@@ -138,27 +156,25 @@ int main() {
             {                
                 if(people[i]->contact(*people[j])) // the people are in contact
                 {
-                    if(people[i]->status()==sick && people[j]->status()==healthy)
+                    if(people[i]->status()==sick && people[j]->status()==healthy && rando()<infectionprobability)
                     { 
                         people[j]->status(sick); 
                         people[j]->infectiontime(time);
                         nsick += 1;
                         nhealthy -= 1;
                     }
-                    else if(people[i]->status()==healthy && people[j]->status()==sick)
+                    else if(people[i]->status()==healthy && people[j]->status()==sick && rando()<infectionprobability)
                     { 
                         people[i]->status(sick); 
                         people[i]->infectiontime(time);
                         nsick += 1;
                         nhealthy -= 1;
                     }
-                    people[i]->changedirection();
-                    people[j]->changedirection();
                 }
             }
+            people[i]->changedirection();
         }
         time += 1.;
-        // calculate r_0
         std::cout<<std::flush<<"time: "<<time<<", nsick: "<<nsick<<", nhealthy: "<<nhealthy<<", nimmune: "<<nimmune<<"                \r";
         outfile<<time<<"\t"<<nsick<<"\t"<<nhealthy<<"\t"<<nimmune<<std::endl;
 
