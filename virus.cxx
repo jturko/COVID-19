@@ -12,6 +12,7 @@
 #include<iostream>
 #include<cmath>
 #include<fstream>
+#include <sstream>
 
 #include "TH1F.h"
 #include "THStack.h"
@@ -21,24 +22,20 @@
 #include "TAxis.h"
 #include "TROOT.h"
 #include "TStyle.h"
+#include "TLegend.h"
 
 double xdim = 150;
 double ydim = 100;
-const int npeople = 500;
-double infectionlength = 300;
-double socialdistancing = 0.9;
+int npeople = 300;
+double infectionduration = 400;
+double quarantinefactor = 0.95;
 double stepsize = 0.5;
-double contactsize = 0.5;
-double quarantinetime = 500;
+double contactsize = 1.5;
+double quarantineduration = 600;
 double randomdirectioninc = 0.2;
-double infectionprobability = 0.5;
-int casesuntilquarantine = 50;
-double storeprobability = 0.001;
+double infectionprobability = 0.25;
+int casesprequarantine = 80;
 double quarantineeasingfactor = 0.01;
-
-double xstore = xdim/2.;
-double ystore = ydim/2.;
-int maxstorebound = npeople/2;
 
 enum condition
 {
@@ -67,13 +64,11 @@ void printparameters() {
              <<"dimy:\t\t\t"<<ydim<<std::endl
              <<"contact size:\t\t"<<contactsize<<std::endl
              <<"step size:\t\t"<<stepsize<<std::endl
-             <<"infection duration:\t"<<infectionlength<<std::endl
-             <<"social dist. duration:\t"<<quarantinetime<<std::endl
-             <<"social dist. factor:\t"<<socialdistancing<<std::endl
+             <<"infection duration:\t"<<infectionduration<<std::endl
              <<"infection prob.:\t"<<infectionprobability<<std::endl
-             <<"cases pre-quarantine:\t"<<casesuntilquarantine<<std::endl
-             <<"prob. of storebound:\t"<<storeprobability<<std::endl
-             <<"max people storebound:\t"<<maxstorebound<<std::endl
+             <<"quarantine duration:\t"<<quarantineduration<<std::endl
+             <<"quarantine factor:\t"<<quarantinefactor<<std::endl
+             <<"cases pre-quarantine:\t"<<casesprequarantine<<std::endl
              <<"quarantine easing fact:\t"<<quarantineeasingfactor<<std::endl
              <<"====================================="<<std::endl;
 }
@@ -88,7 +83,6 @@ class person
             fStatus = status;
             fDirection = direction;
             fInfectionTime = 1e100;
-            fStorebound = false;
         }
         person(int id) {
             fId = id;
@@ -97,7 +91,6 @@ class person
             fStatus = healthy;
             fDirection = 360.*rando();
             fInfectionTime = 1e100;
-            fStorebound = false;
         }
 
         double id() { return fId; }
@@ -117,29 +110,23 @@ class person
         double infectiontime() { return fInfectionTime; }
         void infectiontime(double time) { fInfectionTime = time; }
 
-        bool storebound() { return fStorebound; }
-        void storebound(bool val) { fStorebound = val; }
 
         void print() { 
             std::cout<< "id: "<<fId<<",\t x: "<<fX<<",\t y: "<<fY<<",\t direction: "<<fDirection<<",\t status: "<<pcond(fStatus);
             if(fStatus!=healthy) std::cout<<",\t infection time: "<<fInfectionTime<<std::endl; else std::cout<<std::endl;
         }
         bool contact(person other) { 
-            if( std::sqrt( std::pow(x()-other.x(),2.) + std::pow(y()-other.y(),2.) ) < contactsize ) return true; 
+            if( std::sqrt( std::pow(fX-other.x(),2.) + std::pow(fY-other.y(),2.) ) < contactsize ) return true; 
             else return false; 
         }
         void walk() {
-            if(storebound()) { 
-                fDirection = std::atan((fY-ystore)/(fX-xstore));
-                if(fX>xstore) fDirection += M_PI;
-            }
             // check if beyond boundary, move to it and change dir if we have
-            if     ( x() <= 0. )     { x(0.);      direction(2.*M_PI*rando()); }
-            else if( x() >= xdim )   { x(xdim);    direction(2.*M_PI*rando()); }
-            else if( y() <= 0. )     { y(0.);      direction(2.*M_PI*rando()); }
-            else if( y() >= ydim )   { y(ydim);    direction(2.*M_PI*rando()); } 
-            x( x()+stepsize*std::cos(direction()) );
-            y( y()+stepsize*std::sin(direction()) );
+            if     ( fX <= 0. )     { fX = 0.;      fDirection = 2.*M_PI*rando(); }
+            else if( fX >= xdim )   { fX = xdim;    fDirection = 2.*M_PI*rando(); }
+            else if( fY <= 0. )     { fY = 0.;      fDirection = 2.*M_PI*rando(); }
+            else if( fY >= ydim )   { fY = ydim;    fDirection = 2.*M_PI*rando(); } 
+            fX += stepsize*std::cos(fDirection);
+            fY += stepsize*std::sin(fDirection);
         }
         void randomdirection() { fDirection += (1.-2.*rando())*randomdirectioninc; }
       
@@ -150,7 +137,6 @@ class person
         double fInfectionTime;
         double fDirection;
         condition fStatus;
-        bool fStorebound;
 };
 
 void plotforgif(int time, person ** people, bool quarantinestart, double quarantinestarttime, bool quarantinestop, double quarantinestoptime)
@@ -171,9 +157,9 @@ void plotforgif(int time, person ** people, bool quarantinestart, double quarant
         if(people[i]->status()==immune) himmune->SetPoint(himmune->GetN(),people[i]->x(),people[i]->y());
     }
     TAxis * axis = hhealthy->GetXaxis();
-    axis->SetLimits(-10.,160.);
-    hhealthy->GetHistogram()->SetMaximum(110.);    
-    hhealthy->GetHistogram()->SetMinimum(-10.);
+    axis->SetLimits(-1.,xdim+1.);
+    hhealthy->GetHistogram()->SetMaximum(ydim+1.);    
+    hhealthy->GetHistogram()->SetMinimum(-1.);
     hhealthy->SetMarkerColor(kGray);
     hhealthy->SetMarkerSize(0.5);
     hhealthy->SetMarkerStyle(20);
@@ -186,7 +172,7 @@ void plotforgif(int time, person ** people, bool quarantinestart, double quarant
     if(hhealthy->GetN()>0) hhealthy->Draw("ap");
     if(hsick->GetN()>0) hsick->Draw("p same");
     if(himmune->GetN()>0) himmune->Draw("p same");
-    
+
     // bottom pad
     c1->cd(2);
     gStyle->SetOptStat(0);
@@ -233,16 +219,45 @@ void plotforgif(int time, person ** people, bool quarantinestart, double quarant
         TLine * qe = new TLine(quarantinestoptime,0,quarantinestoptime,npeople);
         qe->Draw("same");
     }
+    TLegend * leg = new TLegend(0.1,0.7,0.3,0.9);
+    leg->AddEntry(hhealthy,"healthy","p");
+    leg->AddEntry(hsick,"sick","p");
+    leg->AddEntry(himmune,"immune","p");
+    leg->Draw("same");
 
     c1->SaveAs(Form("gif_files/plot_%05d.gif",time));
     delete c1;
     c1 = NULL;
 }
 
-int main() {
+void parseargs(int argc, char *argv[])
+{
+    if((argc-1)%2==0 && argc>1) {
+        for(int i=1; i<argc; i+=2) {
+            std::stringstream ss;
+            ss << argv[i+1];
+            std::string thisarg = std::string(argv[i]);
+            if(thisarg=="-xdim" || thisarg=="-dx")                         ss >> xdim;
+            else if(thisarg=="-ydim" || thisarg=="-dy")                    ss >> ydim;
+            else if(thisarg=="-npeople" || thisarg=="-N")                  ss >> npeople;
+            else if(thisarg=="-infectionduration" || thisarg=="-id")       ss >> infectionduration;
+            else if(thisarg=="-quarantinefactor" || thisarg=="-qf")        ss >> quarantinefactor;
+            else if(thisarg=="-stepsize" || thisarg=="-ss")                ss >> stepsize;
+            else if(thisarg=="-contactsize" || thisarg=="-cs")             ss >> contactsize;
+            else if(thisarg=="-quarantineduration" || thisarg=="-qd")      ss >> quarantineduration;
+            else if(thisarg=="-infectionprobability" || thisarg=="-ip")    ss >> infectionprobability;
+            else if(thisarg=="-casesprequarantine" || thisarg=="-cpq")     ss >> casesprequarantine;
+            else if(thisarg=="-quarantineeasingfactor" || thisarg=="-qef") ss >> quarantineeasingfactor;
+            else std::cout<<"---> unknown argument: "<<thisarg<<std::endl;
+        }
+    }
+} 
+
+int main(int argc, char *argv[]) {
+    parseargs(argc, argv);
     printparameters();
 
-    srand(time(0));
+    srand((unsigned int)(time(0)));
     std::ofstream outfile;
     outfile.open("output.dat");    
 
@@ -250,14 +265,13 @@ int main() {
     int nsick = 1;
     int nimmune = 0;
     double time = 0.;
-    double currentsocialdistancing = 0.;    
+    double currentquarantinefactor = 0.;    
     double quarantinestarttime = 1000000;
     bool quarantinestarted = false;
     bool quarantinefinished = false;
-    int nstorebound = 0;
 
     // populate array with healthy people at random positions
-    person * people[npeople];
+    person * people[(const int)npeople];
     for(int i=0; i<npeople; i++) people[i] = new person(i);
     
     // make one persons sick
@@ -266,34 +280,25 @@ int main() {
 
     while(nsick > 0) // this iterator is the passage of time
     {
-        if(socialdistancing>0.) {
-            if(nsick >= casesuntilquarantine && quarantinestarted==false) { 
+        if(quarantinefactor>0.) {
+            if(nsick >= casesprequarantine && quarantinestarted==false) { 
                 std::cout<<"---> quarantine started!"<<std::endl;
-                currentsocialdistancing = socialdistancing;
+                currentquarantinefactor = quarantinefactor;
                 quarantinestarttime = time;
                 quarantinestarted = true;
             }
-            if((time-quarantinestarttime) > quarantinetime && quarantinefinished==false) { 
+            if((time-quarantinestarttime) > quarantineduration && quarantinefinished==false) { 
                 std::cout<<"---> quarantine ended!"<<std::endl;
                 quarantinefinished = true;
             }
-            if(quarantinefinished && currentsocialdistancing > 0.) currentsocialdistancing -= quarantineeasingfactor;
+            if(quarantinefinished && currentquarantinefactor > 0.) currentquarantinefactor -= quarantineeasingfactor;
+            if(currentquarantinefactor < 0.) currentquarantinefactor = 0.;
         }
-        for(int i=0; i<npeople*(1.0-currentsocialdistancing); i++) people[i]->walk(); // make them walk
+        for(int i=0; i<npeople*(1.0-currentquarantinefactor); i++) people[i]->walk(); // make them walk
         
         for(int i=0; i<npeople; i++) // loop over all people
         {
-            if(nstorebound<maxstorebound) {
-                if(rando()<storeprobability) { 
-                    people[i]->storebound(true);
-                    nstorebound++;
-                }
-                if(std::sqrt( std::pow(people[i]->x()-xstore,2.) + std::pow(people[i]->y()-ystore,2.) ) < contactsize) 
-                    if(people[i]->storebound()) nstorebound--;
-                    people[i]->storebound(false);            
-            }
-
-            if(time-people[i]->infectiontime() > infectionlength && people[i]->status() == sick) // check how long they have been infected 
+            if(time-people[i]->infectiontime() > infectionduration && people[i]->status() == sick) // check how long they have been infected 
             {
                 people[i]->status(immune);
                 nimmune += 1;
@@ -311,8 +316,6 @@ int main() {
                             nsick += 1;
                             nhealthy -= 1;
                         }
-                        people[i]->randomdirection();
-                        people[j]->randomdirection();
                     }
                     else if(people[i]->status()==healthy && people[j]->status()==sick)
                     { 
@@ -322,15 +325,13 @@ int main() {
                             nsick += 1;
                             nhealthy -= 1;
                         }
-                        people[i]->randomdirection();
-                        people[j]->randomdirection();
                     }
                 }
             }
-            if(!people[i]->storebound()) people[i]->randomdirection();
+            people[i]->randomdirection();
         }
         time += 1.;
-        std::cout<<"\rtime: "<<time<<", nsick: "<<nsick<<", nhealthy: "<<nhealthy<<", nimmune: "<<nimmune<<", nstorebound: "<<nstorebound<<"  "<<std::flush;
+        std::cout<<"\rtime: "<<time<<", nsick: "<<nsick<<", nhealthy: "<<nhealthy<<", nimmune: "<<nimmune<<"  "<<std::flush;
         outfile<<time<<"\t"<<nsick<<"\t"<<nhealthy<<"\t"<<nimmune<<std::endl;
 
         // save data for making a gif
@@ -340,11 +341,15 @@ int main() {
         giffile.open(buffer);
         for(int i=0; i<npeople; i++) giffile<<people[i]->x()<<",\t"<<people[i]->y()<<",\t"<<people[i]->status()<<std::endl;
         giffile.close();
-        plotforgif(time,people,quarantinestarted,quarantinestarttime,quarantinefinished,quarantinestarttime+quarantinetime);
+        plotforgif(time,people,quarantinestarted,quarantinestarttime,quarantinefinished,quarantinestarttime+quarantineduration);
     }
     outfile.close();
     std::cout<<std::endl;
     
     system("gifsicle --delay=10 --loop=5 gif_files/plot_*.gif > anim.gif");
+    std::cout<<"gif file created: anim.gif"<<std::endl;
+    system("rm -r gif_files/*");    
+
+    return 0;
 }
 
