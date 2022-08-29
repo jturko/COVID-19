@@ -24,6 +24,8 @@
 #include "TStyle.h"
 #include "TLegend.h"
 
+#include "TError.h"
+
 double xdim = 150;
 double ydim = 100;
 int npeople = 300;
@@ -36,6 +38,7 @@ double randomdirectioninc = 0.2;
 double infectionprobability = 0.25;
 int casesprequarantine = 80;
 double quarantineeasingfactor = 0.01;
+int immuneduration = 50;
 
 enum condition
 {
@@ -70,6 +73,7 @@ void printparameters() {
              <<"quarantine factor:\t"<<quarantinefactor<<std::endl
              <<"cases pre-quarantine:\t"<<casesprequarantine<<std::endl
              <<"quarantine easing fact:\t"<<quarantineeasingfactor<<std::endl
+	           <<"immune duration:\t"<<immuneduration<<std::endl
              <<"====================================="<<std::endl;
 }
 
@@ -83,6 +87,7 @@ class person
             fStatus = status;
             fDirection = direction;
             fInfectionTime = 1e100;
+            fImmuneTime = 1e100;
         }
         person(int id) {
             fId = id;
@@ -91,6 +96,7 @@ class person
             fStatus = healthy;
             fDirection = 360.*rando();
             fInfectionTime = 1e100;
+            fImmuneTime = 1e100;
         }
 
         double id() { return fId; }
@@ -110,6 +116,8 @@ class person
         double infectiontime() { return fInfectionTime; }
         void infectiontime(double time) { fInfectionTime = time; }
 
+        double immunetime() { return fImmuneTime; }
+        void immunetime(double time) { fImmuneTime = time; }
 
         void print() { 
             std::cout<< "id: "<<fId<<",\t x: "<<fX<<",\t y: "<<fY<<",\t direction: "<<fDirection<<",\t status: "<<pcond(fStatus);
@@ -135,6 +143,7 @@ class person
         double fX;
         double fY;
         double fInfectionTime;
+	      double fImmuneTime;
         double fDirection;
         condition fStatus;
 };
@@ -223,11 +232,19 @@ void plotforgif(int time, person ** people, bool quarantinestart, double quarant
     leg->AddEntry(hhealthy,"healthy","p");
     leg->AddEntry(hsick,"sick","p");
     leg->AddEntry(himmune,"immune","p");
+    leg->SetBorderSize(0);
+    leg->SetFillStyle(0);
     leg->Draw("same");
+
 
     c1->SaveAs(Form("gif_files/plot_%05d.gif",time));
     delete c1;
     c1 = NULL;
+
+    delete hs; delete hh; delete hi;
+    delete hsick; delete hhealthy; delete himmune;
+    delete leg;
+
 }
 
 void parseargs(int argc, char *argv[])
@@ -248,6 +265,7 @@ void parseargs(int argc, char *argv[])
             else if(thisarg=="-infectionprobability" || thisarg=="-ip")    ss >> infectionprobability;
             else if(thisarg=="-casesprequarantine" || thisarg=="-cpq")     ss >> casesprequarantine;
             else if(thisarg=="-quarantineeasingfactor" || thisarg=="-qef") ss >> quarantineeasingfactor;
+	          else if(thisarg=="-immuneduration" || thisarg=="-rd")	         ss >> immuneduration;
             else std::cout<<"---> unknown argument: "<<thisarg<<std::endl;
         }
     }
@@ -301,9 +319,18 @@ int main(int argc, char *argv[]) {
             if(time-people[i]->infectiontime() > infectionduration && people[i]->status() == sick) // check how long they have been infected 
             {
                 people[i]->status(immune);
-                nimmune += 1;
-                nsick -= 1;
+                people[i]->immunetime(time);
+                nimmune++;
+                nsick--;
             }
+	          if(time-people[i]->immunetime() > immuneduration && people[i]->status() == immune) // check how long they have been immune 
+	          {
+		            people[i]->status(healthy);
+                people[i]->infectiontime(1e100);
+                people[i]->immunetime(1e100);
+                nimmune--;
+                nhealthy++;
+	          }
             for(int j=people[i]->id()+1; j<npeople; j++) // check if anyone is in contact
             {                
                 if(people[i]->contact(*people[j])) // the people are in contact
@@ -346,7 +373,7 @@ int main(int argc, char *argv[]) {
     outfile.close();
     std::cout<<std::endl;
     
-    system("gifsicle --delay=10 --loop=5 gif_files/plot_*.gif > anim.gif");
+    system("gifsicle --delay=5 --loop=5 gif_files/plot_*.gif > anim.gif");
     std::cout<<"gif file created: anim.gif"<<std::endl;
     system("rm -r gif_files/*");    
 
