@@ -67,13 +67,13 @@ void printparameters() {
              <<"dimy:\t\t\t"<<ydim<<std::endl
              <<"contact size:\t\t"<<contactsize<<std::endl
              <<"step size:\t\t"<<stepsize<<std::endl
-             <<"infection duration:\t"<<infectionduration<<std::endl
              <<"infection prob.:\t"<<infectionprobability<<std::endl
-             <<"quarantine duration:\t"<<quarantineduration<<std::endl
-             <<"quarantine factor:\t"<<quarantinefactor<<std::endl
-             <<"cases pre-quarantine:\t"<<casesprequarantine<<std::endl
-             <<"quarantine easing fact:\t"<<quarantineeasingfactor<<std::endl
+             <<"infection duration:\t"<<infectionduration<<std::endl
 	           <<"immune duration:\t"<<immuneduration<<std::endl
+             <<"quarantine duration:\t"<<quarantineduration<<std::endl
+             <<"cases pre-quarantine:\t"<<casesprequarantine<<std::endl
+             <<"quarantine factor:\t"<<quarantinefactor<<std::endl
+             <<"quarantine easing fact:\t"<<quarantineeasingfactor<<std::endl
              <<"====================================="<<std::endl;
 }
 
@@ -146,7 +146,24 @@ class person
 	      double fImmuneTime;
         double fDirection;
         condition fStatus;
+
 };
+
+
+int npixelx = 50;
+int npixely = 50;
+
+int getpixelx(person * guy) {
+  double pct = guy->x() / xdim;
+  int pixel = pct * (npixelx-1);
+  return pixel;  
+}
+
+int getpixely(person * guy) {
+  double pct = guy->y() / ydim;
+  int pixel = pct * (npixely-1);
+  return pixel;  
+}
 
 void plotforgif(int time, person ** people, bool quarantinestart, double quarantinestarttime, bool quarantinestop, double quarantinestoptime)
 {
@@ -276,8 +293,8 @@ int main(int argc, char *argv[]) {
     printparameters();
 
     srand((unsigned int)(time(0)));
-    std::ofstream outfile;
-    outfile.open("output.dat");    
+    //std::ofstream outfile;
+    //outfile.open("output.dat");    
 
     int nhealthy = npeople-1;
     int nsick = 1;
@@ -296,8 +313,23 @@ int main(int argc, char *argv[]) {
     people[0]->status(sick);
     people[0]->infectiontime(0);
 
+    std::vector<int> pixels[npixelx][npixely];
+
     while(nsick > 0) // this iterator is the passage of time
     {
+        // clear pixels
+        for(int xx=0; xx<npixelx; xx++ ) {
+          for(int yy=0; yy<npixely; yy++ ) {
+            pixels[xx][yy].clear();
+          }
+        }
+        // assign pixels
+        for(int i=0; i<npeople; i++) {
+            int px = getpixelx(people[i]);
+            int py = getpixely(people[i]);
+            pixels[px][py].push_back(i);
+        }
+
         if(quarantinefactor>0.) {
             if(nsick >= casesprequarantine && quarantinestarted==false) { 
                 std::cout<<"---> quarantine started!"<<std::endl;
@@ -313,69 +345,121 @@ int main(int argc, char *argv[]) {
             if(currentquarantinefactor < 0.) currentquarantinefactor = 0.;
         }
         for(int i=0; i<npeople*(1.0-currentquarantinefactor); i++) people[i]->walk(); // make them walk
+
+        //for(int i=0; i<npeople; i++) // loop over all people
+        //{
+        //    if(time-people[i]->infectiontime() > infectionduration && people[i]->status() == sick) // check how long they have been infected 
+        //    {
+        //        people[i]->status(immune);
+        //        people[i]->immunetime(time);
+        //        nimmune++;
+        //        nsick--;
+        //    }
+	      //    if(time-people[i]->immunetime() > immuneduration && people[i]->status() == immune) // check how long they have been immune 
+	      //    {
+		    //        people[i]->status(healthy);
+        //        people[i]->infectiontime(1e100);
+        //        people[i]->immunetime(1e100);
+        //        nimmune--;
+        //        nhealthy++;
+	      //    }
+        //    for(int j=people[i]->id()+1; j<npeople; j++) // check if anyone is in contact
+        //    {                
+        //        if(people[i]->contact(*people[j])) // the people are in contact
+        //        {
+        //            if(people[i]->status()==sick && people[j]->status()==healthy)
+        //            { 
+        //                if(rando()<infectionprobability) {
+        //                    people[j]->status(sick); 
+        //                    people[j]->infectiontime(time);
+        //                    nsick += 1;
+        //                    nhealthy -= 1;
+        //                }
+        //            }
+        //            else if(people[i]->status()==healthy && people[j]->status()==sick)
+        //            { 
+        //                if(rando()<infectionprobability) {
+        //                    people[i]->status(sick); 
+        //                    people[i]->infectiontime(time);
+        //                    nsick += 1;
+        //                    nhealthy -= 1;
+        //                }
+        //            }
+        //        }
+        //    }
+        //    people[i]->randomdirection();
+        //}
         
-        for(int i=0; i<npeople; i++) // loop over all people
-        {
-            if(time-people[i]->infectiontime() > infectionduration && people[i]->status() == sick) // check how long they have been infected 
-            {
-                people[i]->status(immune);
-                people[i]->immunetime(time);
-                nimmune++;
-                nsick--;
-            }
-	          if(time-people[i]->immunetime() > immuneduration && people[i]->status() == immune) // check how long they have been immune 
-	          {
-		            people[i]->status(healthy);
-                people[i]->infectiontime(1e100);
-                people[i]->immunetime(1e100);
-                nimmune--;
-                nhealthy++;
-	          }
-            for(int j=people[i]->id()+1; j<npeople; j++) // check if anyone is in contact
-            {                
-                if(people[i]->contact(*people[j])) // the people are in contact
-                {
-                    if(people[i]->status()==sick && people[j]->status()==healthy)
+        // loop over all pixels
+        for(int px=0; px<npixelx; px++) {
+          for(int py=0; py<npixely; py++) {
+            // loop over the people in the current pixel
+            for(int pp1=0; pp1<pixels[px][py].size(); pp1++) {
+              person * guy1 = people[pixels[px][py][pp1]];
+              if(time-guy1->infectiontime() > infectionduration && guy1->status() == sick) // check how long they have been infected 
+              {
+                  guy1->status(immune);
+                  guy1->immunetime(time);
+                  nimmune++;
+                  nsick--;
+              }
+	            if(time-guy1->immunetime() > immuneduration && guy1->status() == immune) // check how long they have been immune 
+	            {
+		              guy1->status(healthy);
+                  guy1->infectiontime(1e100);
+                  guy1->immunetime(1e100);
+                  nimmune--;
+                  nhealthy++;
+	            }
+              guy1->randomdirection();
+              // loop over the other people in the current pixel
+              for(int pp2=pp1+1; pp2<pixels[px][py].size(); pp2++) {
+                person * guy2 = people[pixels[px][py][pp2]];
+                //check if in contact
+                if(guy1->contact(*guy2)) {
+                    if(guy1->status()==sick && guy2->status()==healthy)
                     { 
                         if(rando()<infectionprobability) {
-                            people[j]->status(sick); 
-                            people[j]->infectiontime(time);
-                            nsick += 1;
-                            nhealthy -= 1;
+                            guy2->status(sick); 
+                            guy2->infectiontime(time);
+                            nsick++;
+                            nhealthy--;
                         }
                     }
-                    else if(people[i]->status()==healthy && people[j]->status()==sick)
+                    else if(guy1->status()==healthy && guy2->status()==sick)
                     { 
                         if(rando()<infectionprobability) {
-                            people[i]->status(sick); 
-                            people[i]->infectiontime(time);
-                            nsick += 1;
-                            nhealthy -= 1;
+                            guy1->status(sick); 
+                            guy1->infectiontime(time);
+                            nsick++;
+                            nhealthy--;
                         }
                     }
                 }
+              }
             }
-            people[i]->randomdirection();
+          }
         }
+
         time += 1.;
         std::cout<<"\rtime: "<<time<<", nsick: "<<nsick<<", nhealthy: "<<nhealthy<<", nimmune: "<<nimmune<<"  "<<std::flush;
-        outfile<<time<<"\t"<<nsick<<"\t"<<nhealthy<<"\t"<<nimmune<<std::endl;
+        //outfile<<time<<"\t"<<nsick<<"\t"<<nhealthy<<"\t"<<nimmune<<std::endl;
 
         // save data for making a gif
-        std::ofstream giffile;
-        char buffer[50];
-        sprintf(buffer,"gif_files/time_%.0f.dat",time);
-        giffile.open(buffer);
-        for(int i=0; i<npeople; i++) giffile<<people[i]->x()<<",\t"<<people[i]->y()<<",\t"<<people[i]->status()<<std::endl;
-        giffile.close();
-        plotforgif(time,people,quarantinestarted,quarantinestarttime,quarantinefinished,quarantinestarttime+quarantineduration);
+        //std::ofstream giffile;
+        //char buffer[50];
+        //sprintf(buffer,"gif_files/time_%.0f.dat",time);
+        //giffile.open(buffer);
+        //for(int i=0; i<npeople; i++) giffile<<people[i]->x()<<",\t"<<people[i]->y()<<",\t"<<people[i]->status()<<std::endl;
+        //giffile.close();
+        //plotforgif(time,people,quarantinestarted,quarantinestarttime,quarantinefinished,quarantinestarttime+quarantineduration);
     }
-    outfile.close();
-    std::cout<<std::endl;
-    
-    system("gifsicle --delay=5 --loop=5 gif_files/plot_*.gif > anim.gif");
-    std::cout<<"gif file created: anim.gif"<<std::endl;
-    system("rm -r gif_files/*");    
+    //outfile.close();
+    //std::cout<<std::endl;
+    //
+    //system("gifsicle --delay=5 --loop=5 gif_files/plot_*.gif > anim.gif");
+    //std::cout<<"gif file created: anim.gif"<<std::endl;
+    //system("rm -r gif_files/*");    
 
     return 0;
 }
